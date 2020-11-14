@@ -10,6 +10,8 @@ HEIGHT = 600
 
 LIGHT_GRAY = (150, 150, 150)
 DARK_GRAY = (50, 50, 50)
+RED = (255, 0, 0)
+BLUE = (0, 0, 255)
 
 
 class Cell(Enum):
@@ -29,46 +31,87 @@ class Player:
 
 
 class GameField:
+    """
+    Класс поля, который хранит значения в ячейках.
+    """
+
     def __init__(self):
-        self.height = 3
-        self.width = 3
-        self.cells = [[Cell.VOID] * self.width for i in range(self.height)]
+        self.height = 5
+        self.width = 5
+        self.cells = [[Cell.VOID] * self.height for i in range(self.width)]
 
 
 class GameFieldView:
     """
     Виджет игрового поля, который отображает его на экране, а также выясняет место клика.
     """
+    _space = 20
 
-    def __init__(self, field):
-        # загрузить картинки значков клеток...
-        # отобразить первичное состояние поля
+    def __init__(self, field, screen):
         self._field = field
-        self._start_point = ((WIDTH - HEIGHT + 20), 20)
-        self._width = (HEIGHT - 40)
+        self._start_point = ((WIDTH - HEIGHT + self._space), self._space)
+        self._width = (HEIGHT - self._space * 2)
+        self._cell_width = self._width / self._field.width
+        self._cell_height = self._width / self._field.height
+        self._screen = screen
+        self.draw()
 
-    def draw(self, screen):
-        pygame.draw.rect(screen, color=LIGHT_GRAY,
+    def draw(self):
+        pygame.draw.rect(self._screen, color=LIGHT_GRAY,
                          rect=(self._start_point[0], self._start_point[1], self._width, self._width),
                          width=0, border_radius=10)
-        pygame.draw.rect(screen, color=DARK_GRAY,
+        pygame.draw.rect(self._screen, color=DARK_GRAY,
                          rect=(self._start_point[0], self._start_point[1], self._width, self._width),
                          width=4, border_radius=10)
-        for i in range(1, self._field.width):
-            pygame.draw.line(screen, color=DARK_GRAY, width=4,
-                             start_pos=(self._start_point[0] + i * self._width / 3, self._start_point[1]),
-                             end_pos=(self._start_point[0] + i * self._width / 3, self._start_point[1] + self._width))
+        for j in range(1, self._field.width):
+            pygame.draw.line(self._screen, color=DARK_GRAY, width=4,
+                             start_pos=(self._start_point[0] + j * self._width / self._field.width,
+                                        self._start_point[1]),
+                             end_pos=(self._start_point[0] + j * self._width / self._field.width,
+                                      self._start_point[1] + self._width))
 
-        for j in range(1, self._field.height):
-            pygame.draw.line(screen, color=DARK_GRAY, width=4,
-                             start_pos=(self._start_point[0], self._start_point[1] + j * self._width / 3),
-                             end_pos=(self._start_point[0] + self._width, self._start_point[1] + j * self._width / 3))
+        for i in range(1, self._field.height):
+            pygame.draw.line(self._screen, color=DARK_GRAY, width=4,
+                             start_pos=(self._start_point[0],
+                                        self._start_point[1] + i * self._width / self._field.height),
+                             end_pos=(self._start_point[0] + self._width,
+                                      self._start_point[1] + i * self._width / self._field.height))
+
+        def draw_cross(cell_i, cell_j):
+            pygame.draw.line(self._screen, color=RED, width=8,
+                             start_pos=(self._start_point[0] + (cell_j + 0.15) * self._cell_width,
+                                        self._start_point[1] + (cell_i + 0.15) * self._cell_height),
+                             end_pos=(self._start_point[0] + (cell_j + 0.85) * self._cell_width,
+                                      self._start_point[1] + (cell_i + 0.85) * self._cell_height))
+            pygame.draw.line(self._screen, color=RED, width=8,
+                             start_pos=(self._start_point[0] + (cell_j + 0.85) * self._cell_width,
+                                        self._start_point[1] + (cell_i + 0.15) * self._cell_height),
+                             end_pos=(self._start_point[0] + (cell_j + 0.15) * self._cell_width,
+                                      self._start_point[1] + (cell_i + 0.85) * self._cell_height))
+
+        def draw_zero(cell_i, cell_j):
+            pygame.draw.circle(self._screen, color=BLUE, width=8,
+                               center=(self._start_point[0] + (cell_j + 0.5) * self._cell_width,
+                                       self._start_point[1] + (cell_i + 0.5) * self._cell_height),
+                               radius=min(self._cell_width, self._cell_height) / 2.5)
+
+        for i in range(self._field.width):
+            for j in range(self._field.height):
+                if self._field.cells[i][j] == Cell.ZERO:
+                    draw_zero(i, j)
+                elif self._field.cells[i][j] == Cell.CROSS:
+                    draw_cross(i, j)
 
     def check_coords_correct(self, x, y):
-        return True  # TODO: self._height учесть
+        return (x > WIDTH - HEIGHT + self._space) &\
+               (x < WIDTH - self._space) &\
+               (y > self._space) &\
+               (y < HEIGHT - self._space)
 
     def get_coords(self, x, y):
-        return 0, 0  # TODO: реально вычислить клетку клика
+        x = x - (WIDTH - HEIGHT + self._space)
+        y = y - self._space
+        return int(y//self._cell_height), int(x//self._cell_width)
 
 
 class GameRoundManager:
@@ -83,8 +126,9 @@ class GameRoundManager:
 
     def handle_click(self, i, j):
         player = self._players[self._current_player]
-        # игрок делает клик на поле
-        print("click_handled", i, j)
+        if self.field.cells[i][j] == Cell.VOID:
+            self.field.cells[i][j] = player.cell_type
+            self._current_player = 1 - self._current_player
 
 
 class GameWindow:
@@ -101,12 +145,10 @@ class GameWindow:
         self._screen = pygame.display.set_mode((WIDTH, HEIGHT))
         pygame.display.set_caption(self._title)
 
-        player1 = Player("Петя", Cell.CROSS)
-        player2 = Player("Вася", Cell.ZERO)
+        player1 = Player("Ваня", Cell.CROSS)
+        player2 = Player("Аня", Cell.ZERO)
         self._game_manager = GameRoundManager(player1, player2)
-        self._field_widget = GameFieldView(self._game_manager.field)
-
-        self._field_widget.draw(self._screen)
+        self._field_widget = GameFieldView(self._game_manager.field, self._screen)
 
     def main_loop(self):
         finished = False
@@ -121,6 +163,7 @@ class GameWindow:
                     if self._field_widget.check_coords_correct(x, y):
                         i, j = self._field_widget.get_coords(x, y)
                         self._game_manager.handle_click(i, j)
+                        self._field_widget.draw()
             pygame.display.flip()
             clock.tick(FPS)
 
