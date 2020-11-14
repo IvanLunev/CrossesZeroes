@@ -8,10 +8,14 @@ FPS = 60
 WIDTH = 800
 HEIGHT = 600
 
-LIGHT_GRAY = (150, 150, 150)
+LIGHT_GRAY = (200, 200, 200)
 DARK_GRAY = (50, 50, 50)
 RED = (255, 0, 0)
 BLUE = (0, 0, 255)
+WHITE = (255, 255, 255)
+LIGHT_BLUE = (200, 200, 255)
+LIGHT_YELLOW = (255, 255, 200)
+BLACK = (0, 0, 0)
 
 
 class Cell(Enum):
@@ -28,6 +32,12 @@ class Player:
     def __init__(self, name, cell_type):
         self.name = name
         self.cell_type = cell_type
+        if self.cell_type == Cell.CROSS:
+            self.cell_name = "Крестики"
+            self.color = RED
+        else:
+            self.cell_name = "Нолики"
+            self.color = BLUE
 
 
 class GameField:
@@ -36,8 +46,8 @@ class GameField:
     """
 
     def __init__(self):
-        self.height = 5
-        self.width = 5
+        self.height = 10
+        self.width = 10
         self.cells = [[Cell.VOID] * self.height for i in range(self.width)]
 
 
@@ -103,15 +113,18 @@ class GameFieldView:
                     draw_cross(i, j)
 
     def check_coords_correct(self, x, y):
-        return (x > WIDTH - HEIGHT + self._space) &\
-               (x < WIDTH - self._space) &\
-               (y > self._space) &\
+        return (x > WIDTH - HEIGHT + self._space) & \
+               (x < WIDTH - self._space) & \
+               (y > self._space) & \
                (y < HEIGHT - self._space)
 
     def get_coords(self, x, y):
         x = x - (WIDTH - HEIGHT + self._space)
         y = y - self._space
-        return int(y//self._cell_height), int(x//self._cell_width)
+        return int(y // self._cell_height), int(x // self._cell_width)
+
+    def check_winner(self):
+        pass
 
 
 class GameRoundManager:
@@ -120,15 +133,54 @@ class GameRoundManager:
     """
 
     def __init__(self, player1: Player, player2: Player):
-        self._players = [player1, player2]
-        self._current_player = 0
+        self.players = [player1, player2]
+        self.current_player = 0
         self.field = GameField()
 
     def handle_click(self, i, j):
-        player = self._players[self._current_player]
+        player = self.players[self.current_player]
         if self.field.cells[i][j] == Cell.VOID:
             self.field.cells[i][j] = player.cell_type
-            self._current_player = 1 - self._current_player
+            self.current_player = 1 - self.current_player
+
+
+class InformationTable:
+    """
+    Показывает кто чем играет, чей сейчас ход и кто победил.
+    """
+
+    _space = 20
+
+    def __init__(self, screen, game_manager):
+        self.font = pygame.font.SysFont("dejavusansmono", 20)
+        self._screen = screen
+        self._game_manager = game_manager
+        self.draw()
+
+    def draw(self):
+        names = [
+            self.font.render("{}: ".format(self._game_manager.players[0].name), True, BLACK),
+            self.font.render("{}: ".format(self._game_manager.players[1].name), True, BLACK)
+        ]
+        for i in range(2):
+            self._screen.blit(names[i], [self._space, self._space + 30 * i])
+
+        symbols = [
+            self.font.render("{}".format(self._game_manager.players[0].cell_name), True,
+                             self._game_manager.players[0].color),
+            self.font.render("{}".format(self._game_manager.players[1].cell_name), True,
+                             self._game_manager.players[1].color)
+        ]
+        for i in range(2):
+            self._screen.blit(symbols[i], [self._space * 5, self._space + 30 * i])
+
+        current = [
+            self.font.render("Сейчас ходит:", True, BLACK),
+            self.font.render("{}".format(self._game_manager.players[self._game_manager.current_player].name), True,
+                             self._game_manager.players[self._game_manager.current_player].color)
+        ]
+        for i in range(2):
+            self._screen.blit(current[i], [self._space, HEIGHT / 2 + 30 * i])
 
 
 class GameWindow:
@@ -141,14 +193,18 @@ class GameWindow:
         # инициализация pygame
         pygame.init()
 
+        self._back_color = LIGHT_YELLOW
+
         self._title = "Crosses & Zeroes"
         self._screen = pygame.display.set_mode((WIDTH, HEIGHT))
         pygame.display.set_caption(self._title)
+        self._screen.fill(self._back_color)
 
         player1 = Player("Ваня", Cell.CROSS)
         player2 = Player("Аня", Cell.ZERO)
         self._game_manager = GameRoundManager(player1, player2)
         self._field_widget = GameFieldView(self._game_manager.field, self._screen)
+        self._info_widget = InformationTable(self._screen, self._game_manager)
 
     def main_loop(self):
         finished = False
@@ -163,7 +219,9 @@ class GameWindow:
                     if self._field_widget.check_coords_correct(x, y):
                         i, j = self._field_widget.get_coords(x, y)
                         self._game_manager.handle_click(i, j)
+                        self._screen.fill(self._back_color)
                         self._field_widget.draw()
+                        self._info_widget.draw()
             pygame.display.flip()
             clock.tick(FPS)
 
