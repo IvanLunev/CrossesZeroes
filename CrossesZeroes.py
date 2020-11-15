@@ -1,5 +1,3 @@
-from typing import List
-
 import pygame
 from enum import Enum
 
@@ -15,6 +13,7 @@ BLUE = (0, 0, 255)
 WHITE = (255, 255, 255)
 LIGHT_BLUE = (200, 200, 255)
 LIGHT_YELLOW = (255, 255, 200)
+LIGHT_GREEN = (200, 255, 200)
 BLACK = (0, 0, 0)
 
 
@@ -46,8 +45,8 @@ class GameField:
     """
 
     def __init__(self):
-        self.height = 10
-        self.width = 10
+        self.height = 15
+        self.width = 15
         self.cells = [[Cell.VOID] * self.height for i in range(self.width)]
 
 
@@ -124,7 +123,22 @@ class GameFieldView:
         return int(y // self._cell_height), int(x // self._cell_width)
 
     def check_winner(self):
-        pass
+        for j in range(self._field.width):
+            for i in range(self._field.height):
+                if self._field.cells[i][j] != Cell.VOID:
+                    if self._field.width - j >= 5:
+                        if len(set([self._field.cells[i][j + k] for k in range(5)])) == 1:
+                            return self._field.cells[i][j]
+                    if (self._field.width - j >= 5) & (self._field.height - i >= 5):
+                        if len(set([self._field.cells[i + k][j + k] for k in range(5)])) == 1:
+                            return self._field.cells[i][j]
+                    if self._field.height - i >= 5:
+                        if len(set([self._field.cells[i + k][j] for k in range(5)])) == 1:
+                            return self._field.cells[i][j]
+                    if (j >= 4) & (self._field.height - i >= 5):
+                        if len(set([self._field.cells[i + k][j - k] for k in range(5)])) == 1:
+                            return self._field.cells[i][j]
+        return None
 
 
 class GameRoundManager:
@@ -152,12 +166,12 @@ class InformationTable:
     _space = 20
 
     def __init__(self, screen, game_manager):
-        self.font = pygame.font.SysFont("dejavusansmono", 20)
+        self.font = pygame.font.SysFont("dejavusansmono", 18)
         self._screen = screen
         self._game_manager = game_manager
         self.draw()
 
-    def draw(self):
+    def draw_top(self):
         names = [
             self.font.render("{}: ".format(self._game_manager.players[0].name), True, BLACK),
             self.font.render("{}: ".format(self._game_manager.players[1].name), True, BLACK)
@@ -172,8 +186,10 @@ class InformationTable:
                              self._game_manager.players[1].color)
         ]
         for i in range(2):
-            self._screen.blit(symbols[i], [self._space * 5, self._space + 30 * i])
+            self._screen.blit(symbols[i], [self._space * 6, self._space + 30 * i])
 
+    def draw(self):
+        self.draw_top()
         current = [
             self.font.render("Сейчас ходит:", True, BLACK),
             self.font.render("{}".format(self._game_manager.players[self._game_manager.current_player].name), True,
@@ -181,6 +197,30 @@ class InformationTable:
         ]
         for i in range(2):
             self._screen.blit(current[i], [self._space, HEIGHT / 2 + 30 * i])
+
+    def check_coords_correct(self, x, y):
+        return (x > self._space) & \
+               (x < WIDTH - HEIGHT - self._space) & \
+               (y > HEIGHT - 60) & \
+               (y < HEIGHT - self._space)
+
+    def draw_winner(self):
+        self.draw_top()
+        current = [
+            self.font.render("Победитель:", True, BLACK),
+            self.font.render("{}".format(self._game_manager.players[1 - self._game_manager.current_player].name), True,
+                             self._game_manager.players[1 - self._game_manager.current_player].color)
+        ]
+        for i in range(2):
+            self._screen.blit(current[i], [self._space, HEIGHT / 2 + 30 * i])
+
+        pygame.draw.rect(self._screen, color=LIGHT_GREEN,
+                         rect=(self._space, HEIGHT - 60, WIDTH - HEIGHT - 2 * self._space, 40),
+                         width=0, border_radius=10)
+        pygame.draw.rect(self._screen, color=DARK_GRAY,
+                         rect=(self._space, HEIGHT - 60, WIDTH - HEIGHT - 2 * self._space, 40),
+                         width=4, border_radius=10)
+        self._screen.blit(self.font.render("Заново!!!", True, BLACK), [self._space * 2, HEIGHT - 50])
 
 
 class GameWindow:
@@ -200,14 +240,15 @@ class GameWindow:
         pygame.display.set_caption(self._title)
         self._screen.fill(self._back_color)
 
-        player1 = Player("Ваня", Cell.CROSS)
-        player2 = Player("Аня", Cell.ZERO)
-        self._game_manager = GameRoundManager(player1, player2)
+        self.player1 = Player("Игрок 1", Cell.CROSS)
+        self.player2 = Player("Игрок 2", Cell.ZERO)
+        self._game_manager = GameRoundManager(self.player1, self.player2)
         self._field_widget = GameFieldView(self._game_manager.field, self._screen)
         self._info_widget = InformationTable(self._screen, self._game_manager)
 
     def main_loop(self):
         finished = False
+        winner_check = False
         clock = pygame.time.Clock()
         while not finished:
             for event in pygame.event.get():
@@ -216,12 +257,22 @@ class GameWindow:
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     mouse_pos = pygame.mouse.get_pos()
                     x, y = mouse_pos
-                    if self._field_widget.check_coords_correct(x, y):
+                    if self._field_widget.check_coords_correct(x, y) & (not winner_check):
                         i, j = self._field_widget.get_coords(x, y)
                         self._game_manager.handle_click(i, j)
                         self._screen.fill(self._back_color)
                         self._field_widget.draw()
-                        self._info_widget.draw()
+                        if self._field_widget.check_winner() is not None:
+                            self._info_widget.draw_winner()
+                            winner_check = True
+                        else:
+                            self._info_widget.draw()
+                    elif self._info_widget.check_coords_correct(x, y):
+                        winner_check = False
+                        self._screen.fill(self._back_color)
+                        self._game_manager = GameRoundManager(self.player1, self.player2)
+                        self._field_widget = GameFieldView(self._game_manager.field, self._screen)
+                        self._info_widget = InformationTable(self._screen, self._game_manager)
             pygame.display.flip()
             clock.tick(FPS)
 
